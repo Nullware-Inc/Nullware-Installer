@@ -1,0 +1,50 @@
+[package]
+name = "nullware-installer"
+version = "0.1.0"
+edition = "2024"
+description = "GUI and CLI installer for Nullware apps (Null YT)"
+repository = "https://github.com/Nullware-Inc/Nullware-Installer"
+default-run = "nullware-installer"
+
+[lib]
+name = "nullware_installer"
+path = "src/lib.rs"
+
+# GUI (also accepts CLI arguments). Needs the "gui" feature.
+[[bin]]
+name = "nullware-installer"
+path = "src/main.rs"
+required-features = ["gui"]
+
+# Terminal-only build: no GUI toolkit, small binary.
+[[bin]]
+name = "nullware-installer-cli"
+path = "src/bin/cli.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+dirs = "7.0.0"
+flate2 = "1.1.11"
+indicatif = "0.18.6"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+slint = { version = "1.18.1", optional = true }
+tar = "0.4.46"
+ureq = "3.5.2"
+zip = "9.6.0"
+
+[features]
+default = ["gui"]
+gui = ["dep:slint", "dep:slint-build"]
+
+[target."cfg(windows)".dependencies]
+winreg = "0.56.0"
+
+[build-dependencies]
+slint-build = { version = "1.18.1", optional = true }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

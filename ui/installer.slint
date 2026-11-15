@@ -1,0 +1,177 @@
+import { Button, ComboBox, ScrollView } from "std-widgets.slint";
+
+export struct AppRow {
+    id: string,
+    name: string,
+    description: string,
+    latest: string,
+    installed: string,
+    formats: [string],
+    format-index: int,
+    can-install: bool,
+}
+
+global Palette {
+    out property <color> bg: #0b0b10;
+    out property <color> fg: #f2f2f7;
+    out property <color> muted: #f2f2f7a0;
+    out property <color> accent: #ff3d5a;
+}
+
+component Glass inherits Rectangle {
+    border-radius: 18px;
+    background: @linear-gradient(135deg, #ffffff1c 0%, #ffffff08 100%);
+    border-width: 1px;
+    border-color: #ffffff40;
+    drop-shadow-blur: 30px;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-color: #0000005a;
+}
+
+component Pill inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 40px;
+    min-width: label.preferred-width + 36px;
+    border-radius: 20px;
+    background: !enabled ? #ffffff10 : primary ? (ta.has-hover ? Palette.accent.brighter(10%) : Palette.accent) : (ta.has-hover ? #ffffff26 : #ffffff14);
+    border-width: primary ? 0px : 1px;
+    border-color: #ffffff30;
+    animate background { duration: 120ms; }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.clicked(); }
+    }
+    label := Text {
+        text: root.text;
+        color: root.enabled ? (root.primary ? white : Palette.fg) : Palette.muted;
+        font-weight: 700;
+        font-size: 14px;
+    }
+}
+
+export component InstallerWindow inherits Window {
+    title: "Nullware Installer";
+    preferred-width: 760px;
+    preferred-height: 600px;
+    min-width: 560px;
+    min-height: 480px;
+    background: Palette.bg;
+    default-font-family: "Inter";
+
+    in-out property <[AppRow]> apps;
+    in-out property <string> status: "Checking for the latest releases…";
+    in-out property <float> progress: -1;   // -1 = idle, 2 = spinner, 0..1 = determinate
+    in-out property <bool> busy;
+    in property <string> system;
+
+    callback install(string, int);
+    callback uninstall(string);
+
+    // Aurora
+    Rectangle {
+        clip: true;
+        property <float> t: animation-tick() / 40s;
+        Rectangle {
+            x: -parent.width * 0.3 + 40px * Math.sin(t * 360deg);
+            y: -parent.height * 0.5 + 40px * Math.cos(t * 360deg);
+            width: parent.width * 1.1; height: self.width;
+            background: @radial-gradient(circle, #ff3d5a66 0%, #ff3d5a00 60%);
+        }
+        Rectangle {
+            x: parent.width * 0.45 + 30px * Math.cos(t * 360deg);
+            y: parent.height * 0.1;
+            width: parent.width * 0.9; height: self.width;
+            background: @radial-gradient(circle, #6c5cff4d 0%, #6c5cff00 60%);
+        }
+    }
+
+    VerticalLayout {
+        padding: 28px;
+        spacing: 18px;
+
+        VerticalLayout {
+            spacing: 4px;
+            Text { text: "Nullware Installer"; font-size: 32px; font-weight: 900; color: Palette.fg; letter-spacing: -1px; }
+            Text { text: system; font-size: 13px; color: Palette.muted; }
+        }
+
+        ScrollView {
+            VerticalLayout {
+                spacing: 14px;
+                alignment: start;
+                for app in apps: Glass {
+                    VerticalLayout {
+                        padding: 20px;
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            VerticalLayout {
+                                spacing: 4px;
+                                Text { text: app.name; font-size: 20px; font-weight: 800; color: Palette.fg; }
+                                Text { text: app.description; font-size: 13px; color: Palette.muted; wrap: word-wrap; }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 18px;
+                            Text { text: "Latest: " + app.latest; font-size: 13px; color: Palette.fg; vertical-alignment: center; }
+                            Text {
+                                text: app.installed == "" ? "Not installed" : "Installed: " + app.installed;
+                                font-size: 13px;
+                                color: app.installed == "" ? Palette.muted : Palette.accent;
+                                vertical-alignment: center;
+                            }
+                            Rectangle { }
+                        }
+                        HorizontalLayout {
+                            spacing: 10px;
+                            alignment: start;
+                            if app.formats.length > 1: ComboBox {
+                                width: 230px;
+                                model: app.formats;
+                                current-index: app.format-index;
+                                selected => { app.format-index = self.current-index; }
+                            }
+                            Pill {
+                                text: app.installed == "" ? "Install" : (app.installed == app.latest ? "Reinstall" : "Update");
+                                primary: true;
+                                enabled: !busy && app.can-install;
+                                clicked => { install(app.id, app.format-index); }
+                            }
+                            if app.installed != "": Pill {
+                                text: "Uninstall";
+                                enabled: !busy;
+                                clicked => { uninstall(app.id); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Glass {
+            height: 64px;
+            VerticalLayout {
+                padding: 14px;
+                spacing: 8px;
+                Text { text: status; color: Palette.fg; font-size: 13px; overflow: elide; }
+                Rectangle {
+                    height: 6px;
+                    border-radius: 3px;
+                    background: #ffffff18;
+                    clip: true;
+                    Rectangle {
+                        x: progress >= 0 && progress <= 1 ? 0 : (parent.width - self.width) * (0.5 + 0.5 * Math.sin(animation-tick() / 1.2s * 360deg));
+                        width: progress < 0 ? 0 : (progress <= 1 ? parent.width * progress : parent.width * 0.3);
+                        height: parent.height;
+                        border-radius: 3px;
+                        background: Palette.accent;
+                    }
+                }
+            }
+        }
+    }
+}
