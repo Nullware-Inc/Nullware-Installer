@@ -447,6 +447,30 @@ mod windows {
         Ok(())
     }
 
+    /// We can't delete our own running exe, so a hidden cmd removes the folder
+    /// a moment after we exit. `ping` is the delay because `timeout` refuses to
+    /// run without a console, and the command line is passed verbatim
+    /// (`raw_arg`) because Rust's argument quoting isn't what cmd expects.
+    #[cfg(windows)]
+    fn schedule_dir_removal(dir: &Path) -> Result<()> {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        Command::new("cmd")
+            .raw_arg(format!(
+                "/C ping -n 3 127.0.0.1 >nul & rmdir /s /q \"{}\"",
+                dir.display()
+            ))
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()?;
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    fn schedule_dir_removal(dir: &Path) -> Result<()> {
+        let _ = std::fs::remove_dir_all(dir);
+        Ok(())
+    }
+
     pub fn uninstall(app: &App, paths: &[PathBuf]) -> Result<()> {
         #[cfg(windows)]
         {
@@ -460,16 +484,7 @@ mod windows {
         let others: Vec<PathBuf> = paths.iter().filter(|p| **p != dir).cloned().collect();
         remove_files(&others);
         if running_from_inside {
-            // Can't delete our own running exe: let cmd do it a moment after we exit.
-            Command::new("cmd")
-                .args([
-                    "/C",
-                    &format!(
-                        "timeout /t 2 /nobreak >nul & rmdir /s /q \"{}\"",
-                        dir.display()
-                    ),
-                ])
-                .spawn()?;
+            schedule_dir_removal(&dir)?;
         } else {
             let _ = std::fs::remove_dir_all(&dir);
         }
